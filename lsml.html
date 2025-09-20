@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>LSML Browser</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f4f4f4; }
+    .browser {
+      width: 80%;
+      margin: 30px auto;
+      border: 2px solid #333;
+      border-radius: 8px;
+      background: white;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+    }
+    .toolbar {
+      display: flex;
+      background: #333;
+      padding: 6px;
+      border-radius: 6px 6px 0 0;
+    }
+    #addressBar {
+      flex: 1;
+      padding: 6px;
+      border: none;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    #goBtn {
+      margin-left: 6px;
+      padding: 6px 12px;
+      font-size: 14px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .tab {
+      background: #555;
+      color: white;
+      padding: 6px 15px;
+      font-weight: bold;
+    }
+    .content {
+      padding: 20px;
+    }
+    h1 { color: darkblue; margin-top: 0; }
+    p { font-size: 18px; }
+    img { max-width: 300px; margin: 10px 0; }
+  </style>
+</head>
+<body>
+  <h2>LSML Browser</h2>
+
+  <!-- File picker -->
+  <input type="file" id="fileInput" accept=".lsml"><br><br>
+
+  <div class="browser">
+    <div class="toolbar">
+      <input type="text" id="addressBar" placeholder="path/to/file.lsml">
+      <button id="goBtn">Go</button>
+    </div>
+    <div class="tab" id="tabTitle">New Tab</div>
+    <iframe id="viewerFrame" class="content" 
+        sandbox="allow-scripts allow-same-origin allow-modals"></iframe>
+  </div>
+
+  <script>
+  function renderLSML(text) {
+    // Handle <title>
+    const titleMatch = text.match(/<title>([\s\S]*?)<\/title>/i);
+    document.getElementById("tabTitle").innerText =
+      titleMatch ? titleMatch[1].trim() : "Untitled";
+
+    // Replace LSML tags (keep attributes like style)
+    text = text.replace(/<h1([^>]*)>([\s\S]*?)<\/h1>/gi, (m, attrs, p) => `<h1${attrs}>${p.trim()}</h1>`);
+    text = text.replace(/<text([^>]*)>([\s\S]*?)<\/text>/gi, (m, attrs, p) => `<p${attrs}>${p.trim()}</p>`);
+    text = text.replace(/<button([^>]*)>([\s\S]*?)<\/button>/gi, (m, attrs, p) => `<button${attrs}>${p.trim()}</button>`);
+    text = text.replace(/<img([^>]*)\/>/gi, (m, attrs) => `<img${attrs}>`);
+
+    // Write everything into the iframe sandbox
+    const iframe = document.getElementById("viewerFrame");
+    const doc = iframe.contentDocument || iframe.contentWindow.document;
+    doc.open();
+    doc.write(text);
+    doc.close();
+  }
+
+    // File picker
+    document.getElementById("fileInput").addEventListener("change", function(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        renderLSML(e.target.result);
+      };
+      reader.readAsText(file);
+    });
+
+    // Address bar (URL fetch)
+    async function loadLSML(path) {
+      try {
+        const response = await fetch(path);
+        if (!response.ok) throw new Error("File not found");
+        let text = await response.text();
+        renderLSML(text);
+      } catch (err) {
+        document.getElementById("viewer").innerHTML =
+          "<p style='color:red;'>Error: " + err.message + "</p>";
+        document.getElementById("tabTitle").innerText = "Error";
+      }
+    }
+
+    document.getElementById("goBtn").addEventListener("click", () => {
+      const path = document.getElementById("addressBar").value.trim();
+      if (path) loadLSML(path);
+    });
+
+    document.getElementById("addressBar").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        const path = e.target.value.trim();
+        if (path) loadLSML(path);
+      }
+    });
+  </script>
+</body>
+</html>
