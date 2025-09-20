@@ -1,4 +1,12 @@
-<title> tab </title>
-<h1>introductory</h1>
-<text>hi there</text>
-<button>click me</button>
+<title>Test Tab</title>
+<h1 style="color:blue;">Intro</h1>
+<text id="number">Hello from LSML</text>
+<script>
+  const text = document.getElementById("number");
+  let val = 0;
+  function addOne() {
+    val += 1;
+    text.textContent = val;
+  }
+</script>
+<button onclick="addOne()">Click me</button>
