@@ -65,25 +65,52 @@
   </div>
 
   <script>
-  function renderLSML(text) {
-    // Handle <title>
-    const titleMatch = text.match(/<title>([\s\S]*?)<\/title>/i);
-    document.getElementById("tabTitle").innerText =
-      titleMatch ? titleMatch[1].trim() : "Untitled";
+    import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm'
+  
+    const SUPABASE_URL = "https://your-project-id.supabase.co"
+    const SUPABASE_ANON_KEY = "your-anon-public-key"
+  
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 
-    // Replace LSML tags (keep attributes like style)
-    text = text.replace(/<h1([^>]*)>([\s\S]*?)<\/h1>/gi, (m, attrs, p) => `<h1${attrs}>${p.trim()}</h1>`);
-    text = text.replace(/<text([^>]*)>([\s\S]*?)<\/text>/gi, (m, attrs, p) => `<p${attrs}>${p.trim()}</p>`);
-    text = text.replace(/<button([^>]*)>([\s\S]*?)<\/button>/gi, (m, attrs, p) => `<button${attrs}>${p.trim()}</button>`);
-    text = text.replace(/<img([^>]*)\/>/gi, (m, attrs) => `<img${attrs}>`);
-
-    // Write everything into the iframe sandbox
-    const iframe = document.getElementById("viewerFrame");
-    const doc = iframe.contentDocument || iframe.contentWindow.document;
-    doc.open();
-    doc.write(text);
-    doc.close();
-  }
+    async function fetchLSML(filename) {
+      const { data, error } = await supabase
+        .storage
+        .from("lsml files")
+        .download(filename)
+    
+      if (error) {
+        console.error("Error fetching:", error.message)
+        return null
+      }
+    
+      // Convert blob → text
+      const text = await data.text()
+      return text
+    }
+    
+    // Example usage:
+    const fileText = await fetchLSML("HomeTab.lsml")
+    console.log(fileText)
+    
+    function renderLSML(text) {
+      // Handle <title>
+      const titleMatch = text.match(/<title>([\s\S]*?)<\/title>/i);
+      document.getElementById("tabTitle").innerText =
+        titleMatch ? titleMatch[1].trim() : "Untitled";
+  
+      // Replace LSML tags (keep attributes like style)
+      text = text.replace(/<h1([^>]*)>([\s\S]*?)<\/h1>/gi, (m, attrs, p) => `<h1${attrs}>${p.trim()}</h1>`);
+      text = text.replace(/<text([^>]*)>([\s\S]*?)<\/text>/gi, (m, attrs, p) => `<p${attrs}>${p.trim()}</p>`);
+      text = text.replace(/<button([^>]*)>([\s\S]*?)<\/button>/gi, (m, attrs, p) => `<button${attrs}>${p.trim()}</button>`);
+      text = text.replace(/<img([^>]*)\/>/gi, (m, attrs) => `<img${attrs}>`);
+  
+      // Write everything into the iframe sandbox
+      const iframe = document.getElementById("viewerFrame");
+      const doc = iframe.contentDocument || iframe.contentWindow.document;
+      doc.open();
+      doc.write(text);
+      doc.close();
+    }
 
     // File picker
     document.getElementById("fileInput").addEventListener("change", function(event) {
@@ -125,3 +152,4 @@
   </script>
 </body>
 </html>
+
