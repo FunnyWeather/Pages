@@ -88,7 +88,7 @@
     // Fetch LSML content
     async function fetchLSML(filename) {
       try {
-        const res = await fetch(filename);
+        const res = await fetch(`https://funnyweather.github.io/${filename}`);
         if (!res.ok) throw new Error("File not found");
         return await res.text();
       } catch (err) {
