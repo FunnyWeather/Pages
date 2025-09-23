@@ -1,5 +1,4 @@
 [
-  "HomeTab.lsml",
-  "WeatherTab.lsml",
-  "AboutPage.lsml"
+  { "name": "Home Tab", "file": "Pages/HomeTab.lsml" },
+  { "name": "About Page", "file": "Pages/AboutPage.lsml" }
 ]
