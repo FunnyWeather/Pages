@@ -40,8 +40,15 @@
       padding: 6px 15px;
       font-weight: bold;
     }
-    .content {
-      padding: 20px;
+    .content { padding: 20px; }
+    #searchResults { margin: 10px; }
+    #searchResults button {
+      margin: 3px;
+      padding: 5px 10px;
+      border: 1px solid #333;
+      border-radius: 4px;
+      cursor: pointer;
+      background: #eee;
     }
     h1 { color: darkblue; margin-top: 0; }
     p { font-size: 18px; }
@@ -51,60 +58,60 @@
 <body>
   <h2>LSML Browser</h2>
 
-  <!-- File picker -->
-  <input type="file" id="fileInput" accept=".lsml"><br><br>
-
   <div class="browser">
     <div class="toolbar">
-      <input type="text" id="addressBar" placeholder="path/to/file.lsml">
+      <input type="text" id="addressBar" placeholder="Search or enter filename...">
       <button id="goBtn">Go</button>
     </div>
+    <div id="searchResults"></div>
     <div class="tab" id="tabTitle">New Tab</div>
-    <iframe id="viewerFrame" class="content" 
-        sandbox="allow-scripts allow-same-origin allow-modals"></iframe>
+    <iframe id="viewerFrame" class="content"
+      sandbox="allow-scripts allow-same-origin allow-modals"></iframe>
   </div>
 
   <script>
-    import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm'
-  
-    const SUPABASE_URL = "https://gpofjwehcvejvzpegmea.supabase.co"
-    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdwb2Zqd2VoY3ZlanZ6cGVnbWVhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc3MTc4NTAsImV4cCI6MjA3MzI5Mzg1MH0.snVJvH3tlECZlxIPcy_CZrANfXlXzl38P7eIxdR9d9I"
-  
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+    let fileList = [];
 
-    async function fetchLSML(filename) {
-      const { data, error } = await supabase
-        .storage
-        .from("lsml files")
-        .download(filename)
-    
-      if (error) {
-        console.error("Error fetching:", error.message)
-        return null
+    // Load manifest.json (list of LSML files with names + filenames)
+    async function loadManifest() {
+      try {
+        const res = await fetch("manifest.json"); // 🔹 hosted in repo root
+        fileList = await res.json();
+        console.log("Loaded manifest:", fileList);
+        searchFiles(""); // show all files initially
+      } catch (err) {
+        console.error("Error loading manifest.json:", err);
+        fileList = [];
       }
-    
-      // Convert blob → text
-      const text = await data.text()
-      return text
     }
-    
-    // Example usage:
-    const fileText = await fetchLSML("HomeTab.lsml")
-    console.log(fileText)
-    
+
+    // Fetch LSML content
+    async function fetchLSML(filename) {
+      try {
+        const res = await fetch(filename);
+        if (!res.ok) throw new Error("File not found");
+        return await res.text();
+      } catch (err) {
+        console.error("Error fetching file:", err);
+        return null;
+      }
+    }
+
+    // Render LSML into the iframe
     function renderLSML(text) {
-      // Handle <title>
       const titleMatch = text.match(/<title>([\s\S]*?)<\/title>/i);
       document.getElementById("tabTitle").innerText =
         titleMatch ? titleMatch[1].trim() : "Untitled";
-  
-      // Replace LSML tags (keep attributes like style)
-      text = text.replace(/<h1([^>]*)>([\s\S]*?)<\/h1>/gi, (m, attrs, p) => `<h1${attrs}>${p.trim()}</h1>`);
-      text = text.replace(/<text([^>]*)>([\s\S]*?)<\/text>/gi, (m, attrs, p) => `<p${attrs}>${p.trim()}</p>`);
-      text = text.replace(/<button([^>]*)>([\s\S]*?)<\/button>/gi, (m, attrs, p) => `<button${attrs}>${p.trim()}</button>`);
-      text = text.replace(/<img([^>]*)\/>/gi, (m, attrs) => `<img${attrs}>`);
-  
-      // Write everything into the iframe sandbox
+
+      text = text.replace(/<h1([^>]*)>([\s\S]*?)<\/h1>/gi,
+        (m, attrs, p) => `<h1${attrs}>${p.trim()}</h1>`);
+      text = text.replace(/<text([^>]*)>([\s\S]*?)<\/text>/gi,
+        (m, attrs, p) => `<p${attrs}>${p.trim()}</p>`);
+      text = text.replace(/<button([^>]*)>([\s\S]*?)<\/button>/gi,
+        (m, attrs, p) => `<button${attrs}>${p.trim()}</button>`);
+      text = text.replace(/<img([^>]*)\/>/gi,
+        (m, attrs) => `<img${attrs}>`);
+
       const iframe = document.getElementById("viewerFrame");
       const doc = iframe.contentDocument || iframe.contentWindow.document;
       doc.open();
@@ -112,45 +119,54 @@
       doc.close();
     }
 
-    // File picker
-    document.getElementById("fileInput").addEventListener("change", function(event) {
-      const file = event.target.files[0];
-      if (!file) return;
-
-      const reader = new FileReader();
-      reader.onload = function(e) {
-        renderLSML(e.target.result);
-      };
-      reader.readAsText(file);
-    });
-
-    // Address bar (URL fetch)
-    async function loadLSML(path) {
-      try {
-        const response = await fetch(path);
-        if (!response.ok) throw new Error("File not found");
-        let text = await response.text();
-        renderLSML(text);
-      } catch (err) {
-        document.getElementById("viewer").innerHTML =
-          "<p style='color:red;'>Error: " + err.message + "</p>";
-        document.getElementById("tabTitle").innerText = "Error";
-      }
+    async function loadFile(filename) {
+      const text = await fetchLSML(filename);
+      if (text) renderLSML(text);
+      else alert("File not found: " + filename);
     }
 
+    // Search function (uses manifest.json entries)
+    function searchFiles(query) {
+      const resultsDiv = document.getElementById("searchResults");
+      resultsDiv.innerHTML = "";
+
+      const matches = fileList.filter(f =>
+        f.name.toLowerCase().includes(query.toLowerCase()) ||
+        f.file.toLowerCase().includes(query.toLowerCase())
+      );
+
+      if (matches.length === 0) {
+        resultsDiv.innerHTML = "<p>No results</p>";
+        return;
+      }
+
+      matches.forEach(item => {
+        const btn = document.createElement("button");
+        btn.innerText = item.name;
+        btn.onclick = () => loadFile(item.file);
+        resultsDiv.appendChild(btn);
+      });
+    }
+
+    // 🔹 Address bar events
     document.getElementById("goBtn").addEventListener("click", () => {
-      const path = document.getElementById("addressBar").value.trim();
-      if (path) loadLSML(path);
+      const query = document.getElementById("addressBar").value.trim();
+      searchFiles(query);
+    });
+
+    document.getElementById("addressBar").addEventListener("input", (e) => {
+      searchFiles(e.target.value.trim());
     });
 
     document.getElementById("addressBar").addEventListener("keydown", (e) => {
       if (e.key === "Enter") {
-        const path = e.target.value.trim();
-        if (path) loadLSML(path);
+        const query = e.target.value.trim();
+        searchFiles(query);
       }
     });
+
+    // Load manifest on page load
+    loadManifest();
   </script>
 </body>
 </html>
-
-
