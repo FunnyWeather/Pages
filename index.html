@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <title>LSML Browser</title>
   <style>
-    body { font-family: Arial, sans-serif; background: #f4f4f4; }
+    body { font-family: Arial, sans-serif; background: #333333; }
     .browser {
       width: 80%;
       margin: 30px auto;
@@ -12,6 +12,7 @@
       border-radius: 8px;
       background: white;
       box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+      padding: 10px;
     }
     .toolbar {
       display: flex;
@@ -40,27 +41,50 @@
       padding: 6px 15px;
       font-weight: bold;
     }
-    .content { padding: 20px; }
-    #searchResults { margin: 10px; }
-    #searchResults button {
-      margin: 3px;
-      padding: 5px 10px;
-      border: 1px solid #333;
-      border-radius: 4px;
+    .content {
+      width: 100%;
+      height: 600px;
+      border: none;
+      padding: 0;
+    }
+    #searchResults { margin: 10px;}
+    #searchResults a {
+      display: inline;
+      margin: 5px 0;
+      color: rgb(126, 126, 211);
+      text-decoration: underline;
       cursor: pointer;
-      background: #eee;
+    }
+    #searchResults a:hover {
+      text-decoration: none;
     }
     h1 { color: darkblue; margin-top: 0; }
     p { font-size: 18px; }
     img { max-width: 300px; margin: 10px 0; }
+    .uploadBox, .getBox {
+      margin-top: 20px;
+      padding: 10px;
+      border: 2px dashed #666;
+      border-radius: 6px;
+      background: #fafafa;
+    }
+    .uploadBox textarea, .uploadBox input,
+    .getBox textarea, .getBox input {
+      width: 100%;
+      margin: 6px 0;
+      padding: 8px;
+      font-size: 14px;
+    }
+    .uploadBox button, .getBox button {
+      padding: 8px 14px;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
-  <h2>LSML Browser</h2>
-
   <div class="browser">
     <div class="toolbar">
-      <input type="text" id="addressBar" placeholder="Search or enter filename...">
+      <input type="text" id="addressBar" placeholder="Enter domain or search...">
       <button id="goBtn">Go</button>
     </div>
     <div id="searchResults"></div>
@@ -69,104 +93,237 @@
       sandbox="allow-scripts allow-same-origin allow-modals"></iframe>
   </div>
 
-  <script>
-    let fileList = [];
+  <div class="getBox">
+    <h3>Get LSML Code</h3>
+    <input type="text" id="getDomainInput" placeholder="Enter domain name (e.g. HomeTab.lsml)">
+    <button id="getBtn">Get Code</button>
+    <textarea id="getResult" rows="8" placeholder="Code will appear here..." readonly></textarea>
+  </div>
 
-    // Load manifest.json (list of LSML files with names + filenames)
-    async function loadManifest() {
-      try {
-        const res = await fetch("manifest.json"); // 🔹 hosted in repo root
-        fileList = await res.json();
-        console.log("Loaded manifest:", fileList);
-        searchFiles(""); // show all files initially
-      } catch (err) {
-        console.error("Error loading manifest.json:", err);
-        fileList = [];
-      }
+  <!-- Firebase -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+    import { getFirestore, doc, getDoc, setDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyDt9goXO2WtRDY3zgbSUnHxp-7Qc2iQCk4",
+      authDomain: "pages-72e47.firebaseapp.com",
+      projectId: "pages-72e47",
+      storageBucket: "pages-72e47.firebasestorage.app",
+      messagingSenderId: "889416242663",
+      appId: "1:889416242663:web:4eaaff94742e0413599942",
+      measurementId: "G-4SRY12VEHE"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    function prettyName(str) {
+      str = str.replace(/\.(lsml|org|com|net|io|app)$/i, "");
+      str = str.replace(/[-_]/g, " ");
+      str = str.replace(/([a-z])([A-Z])/g, "$1 $2");
+      str = str.replace(/(\d+)([a-zA-Z])/g, "$1 $2");
+      str = str.replace(/([a-zA-Z])(\d+)/g, "$1 $2");
+      return str.trim();
     }
 
-    // Fetch LSML content
-    async function fetchLSML(filename) {
-      try {
-        const res = await fetch(`https://funnyweather.github.io/${filename}`);
-        if (!res.ok) throw new Error("File not found");
-        return await res.text();
-      } catch (err) {
-        console.error("Error fetching file:", err);
-        return null;
-      }
-    }
-
-    // Render LSML into the iframe
     function renderLSML(text) {
       const titleMatch = text.match(/<title>([\s\S]*?)<\/title>/i);
       document.getElementById("tabTitle").innerText =
         titleMatch ? titleMatch[1].trim() : "Untitled";
 
-      text = text.replace(/<h1([^>]*)>([\s\S]*?)<\/h1>/gi,
-        (m, attrs, p) => `<h1${attrs}>${p.trim()}</h1>`);
+      for (let i = 1; i <= 6; i++) {
+        const re = new RegExp(`<h${i}([^>]*)>([\\s\\S]*?)<\\/h${i}>`, 'gi');
+        text = text.replace(re, (m, attrs, p) => `<h${i}${attrs}>${p.trim()}</h${i}>`);
+      }
+      text = text.replace(/<lsml([^>]*)>([\s\S]*?)<\/lsml>/gi,
+        (m, attrs, p) => `<p${attrs}>${p.trim()}</p>`);
       text = text.replace(/<text([^>]*)>([\s\S]*?)<\/text>/gi,
         (m, attrs, p) => `<p${attrs}>${p.trim()}</p>`);
       text = text.replace(/<button([^>]*)>([\s\S]*?)<\/button>/gi,
         (m, attrs, p) => `<button${attrs}>${p.trim()}</button>`);
       text = text.replace(/<img([^>]*)\/>/gi,
         (m, attrs) => `<img${attrs}>`);
+      text = text.replace(/<a([^>]*)>([\s\S]*?)<\/a>/gi,
+        (m, attrs, p) => `<a${attrs}>${p.trim()}</a>`);
+      text = text.replace(/<textarea([^>]*)>([\s\S]*?)<\/textarea>/gi,
+        (m, attrs, p) => `<textarea${attrs}>${p.trim()}</textarea>`);
+      text = text.replace(/<table([^>]*)>([\s\S]*?)<\/table>/gi,
+        (m, attrs, p) => `<table${attrs}>${p.trim()}</table>`);
+      text = text.replace(/<tr([^>]*)>([\s\S]*?)<\/tr>/gi,
+        (m, attrs, p) => `<tr${attrs}>${p.trim()}</tr>`);
+      text = text.replace(/<td([^>]*)>([\s\S]*?)<\/td>/gi,
+        (m, attrs, p) => `<td${attrs}>${p.trim()}</td>`);
+      text = text.replace(/<ul([^>]*)>([\s\S]*?)<\/ul>/gi,
+        (m, attrs, p) => `<ul${attrs}>${p.trim()}</ul>`);
+      text = text.replace(/<ol([^>]*)>([\s\S]*?)<\/ol>/gi,
+        (m, attrs, p) => `<ol${attrs}>${p.trim()}</ol>`);
+      text = text.replace(/<li([^>]*)>([\s\S]*?)<\/li>/gi,
+        (m, attrs, p) => `<li${attrs}>${p.trim()}</li>`);
 
       const iframe = document.getElementById("viewerFrame");
-      const doc = iframe.contentDocument || iframe.contentWindow.document;
-      doc.open();
-      doc.write(text);
-      doc.close();
+      const docFrame = iframe.contentDocument || iframe.contentWindow.document;
+      docFrame.open();
+      docFrame.write(text);
+      docFrame.close();
     }
 
-    async function loadFile(filename) {
-      const text = await fetchLSML(filename);
-      if (text) renderLSML(text);
-      else alert("File not found: " + filename);
-    }
-
-    // Search function (uses manifest.json entries)
-    function searchFiles(query) {
-      const resultsDiv = document.getElementById("searchResults");
-      resultsDiv.innerHTML = "";
-
-      const matches = fileList.filter(f =>
-        f.name.toLowerCase().includes(query.toLowerCase()) ||
-        f.file.toLowerCase().includes(query.toLowerCase())
-      );
-
-      if (matches.length === 0) {
-        resultsDiv.innerHTML = "<p>No results</p>";
-        return;
+    async function fetchLSML(domainOrFile) {
+      try {
+        const ref = doc(db, "lsmlFiles", domainOrFile);
+        const snap = await getDoc(ref);
+        return snap.exists() ? snap.data().content : null;
+      } catch (err) {
+        console.error("Firestore fetch error:", err);
+        return null;
       }
-
-      matches.forEach(item => {
-        const btn = document.createElement("button");
-        btn.innerText = item.name;
-        btn.onclick = () => loadFile(item.file);
-        resultsDiv.appendChild(btn);
-      });
     }
 
-    // 🔹 Address bar events
+    async function loadFile(name) {
+      const text = await fetchLSML(name);
+      if (text) renderLSML(text);
+      else alert("File not found: " + name);
+    }
+
+    function looksLikeDomain(text) {
+      return /^[\w\-]+\.lsml$/i.test(text);
+    }
+
+    function normalize(text) {
+      return text
+        .toLowerCase()
+        .replace(/['".,!?-]/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+    }
+
+    function tokenize(text) {
+      return normalize(text).split(" ").filter(Boolean);
+    }
+
+    async function searchFiles(query) {
+      const resultsDiv = document.getElementById("searchResults");
+      resultsDiv.innerHTML = "<p>Searching...</p>";
+
+      try {
+        const snap = await getDocs(collection(db, "lsmlFiles"));
+        let matches = [];
+        const queryTokens = tokenize(query);
+
+        snap.forEach(docSnap => {
+          const rawName = docSnap.id;
+          const pretty = prettyName(rawName);
+          const nameTokens = tokenize(pretty);
+
+          let isMatch;
+          if (queryTokens.length === 0) {
+            isMatch = true; // empty query = return all
+          } else {
+            isMatch = queryTokens.some(qt =>
+              nameTokens.some(nt => nt.startsWith(qt))
+            );
+          }
+
+          if (isMatch) matches.push(rawName);
+        });
+
+        // Sort alphabetically but exact matches first
+        matches.sort((a, b) => {
+          const pa = prettyName(a).toLowerCase();
+          const pb = prettyName(b).toLowerCase();
+          const q = normalize(query);
+          const exactA = pa === q;
+          const exactB = pb === q;
+          if (exactA && !exactB) return -1;
+          if (exactB && !exactA) return 1;
+          return pa.localeCompare(pb);
+        });
+
+        resultsDiv.innerHTML = "";
+        if (matches.length > 0) {
+          matches.forEach(name => {
+            const container = document.createElement("div");
+            container.style.marginBottom = "8px"; // spacing between results
+
+            const link = document.createElement("a");
+            link.textContent = prettyName(name);
+            link.href = "#";
+            link.onclick = (e) => {
+              e.preventDefault();
+              loadFile(name);
+            };
+
+            const domainName = document.createElement("span");
+            domainName.style.color = "gray";
+            domainName.style.marginLeft = "6px";
+            domainName.textContent = `(${name})`;
+
+            container.appendChild(link);
+            container.appendChild(domainName);
+
+            resultsDiv.appendChild(container);
+          });
+        } else {
+          resultsDiv.innerHTML = "<p>No results found.</p>";
+        }
+      } catch (err) {
+        console.error("Search error:", err);
+        resultsDiv.innerHTML = "<p>❌ Search failed.</p>";
+      }
+    }
+
+    async function handleQuery(query) {
+      if (looksLikeDomain(query)) {
+        await loadFile(query);
+      } else {
+        await searchFiles(query);
+      }
+    }
+
     document.getElementById("goBtn").addEventListener("click", () => {
       const query = document.getElementById("addressBar").value.trim();
-      searchFiles(query);
-    });
-
-    document.getElementById("addressBar").addEventListener("input", (e) => {
-      searchFiles(e.target.value.trim());
+      handleQuery(query);
     });
 
     document.getElementById("addressBar").addEventListener("keydown", (e) => {
       if (e.key === "Enter") {
         const query = e.target.value.trim();
-        searchFiles(query);
+        handleQuery(query);
       }
     });
 
-    // Load manifest on page load
-    loadManifest();
+    document.getElementById("uploadBtn").addEventListener("click", async () => {
+      const domain = document.getElementById("domainInput").value.trim();
+      const lsml = document.getElementById("lsmlText").value.trim();
+      const status = document.getElementById("uploadStatus");
+
+      if (!domain || !lsml) {
+        status.innerText = "⚠ Please enter both domain and LSML content.";
+        return;
+      }
+
+      try {
+        const ref = doc(db, "lsmlFiles", domain);
+        await setDoc(ref, { content: lsml });
+        status.innerText = "✅ Uploaded successfully!";
+      } catch (err) {
+        console.error("Upload error:", err);
+        status.innerText = "❌ Upload failed. See console.";
+      }
+    });
+
+    document.getElementById("getBtn").addEventListener("click", async () => {
+      const domain = document.getElementById("getDomainInput").value.trim();
+      const resultBox = document.getElementById("getResult");
+
+      if (!domain) {
+        resultBox.value = "⚠ Please enter a domain.";
+        return;
+      }
+
+      const text = await fetchLSML(domain);
+      resultBox.value = text ? text : "❌ File not found.";
+    });
   </script>
 </body>
 </html>
